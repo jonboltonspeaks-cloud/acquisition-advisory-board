@@ -116,8 +116,10 @@ function initials(name: string) {
 }
 
 export default function App() {
-  const [question, setQuestion] = useState("");
-  const [submitted, setSubmitted] = useState<string | null>(null);
+const [question, setQuestion] = useState("");
+const [submitted, setSubmitted] = useState<string | null>(null);
+const [askedAt, setAskedAt] = useState<string | null>(null);
+
 
   const speaking = useMemo(() => (submitted ? pickAdvisors(submitted) : []), [submitted]);
 
