@@ -72,22 +72,11 @@ function pickAdvisors(question: string): AdvisorId[] {
   return order.filter((id) => hits.has(id)).slice(0, 3);
 }
 
-function demoResponse(advisorId: AdvisorId, question: string): string {
-  // Short, believable “placeholder” answers so the product feels real.
-  switch (advisorId) {
-    case "chris":
-      return `Let’s anchor this in numbers. Before we talk strategy, I’d want: trailing 12 revenue, seller discretionary earnings (SDE) vs EBITDA, customer concentration, and the top add-backs. If you give me those, we can sanity-check your value range and what a buyer will challenge.`;
-    case "maya":
-      return `Treat this like a negotiation, not a formality. The first draft is rarely the best draft. Your leverage comes from clarity: what you will concede, what you won’t, and what you’ll trade. Tell me what outcome you want and I’ll map the cleanest path.`;
-    case "dan":
-      return `Buyers don’t buy “you.” They buy a machine. I’d look at repeatability: SOPs, KPIs, sales-to-production flow, training, and how quality is enforced. If the business runs without heroics, you become far more valuable.`;
-    case "rick":
-      return `Zooming out: buyers love predictable cash flow and category leadership signals. In home services, the story matters—your niche, defensibility, and the roll-up narrative. We can position you so you’re not just “another shop,” but a strategic fit.`;
-    case "jon":
-      return `Before we optimize the deal, let’s make sure it matches your life. Do you want a full exit, a partial exit, or to stay involved? Your best decision is the one that aligns the money with the future you actually want.`;
-    default:
-      return `Tell me more about what you’re trying to achieve.`;
-  }
+<div style={{ marginTop: 10, lineHeight: 1.5 }}>
+  {aiAnswers[id]}
+</div>
+
+
 }
 
 const SUGGESTED = [
@@ -120,6 +109,11 @@ const [question, setQuestion] = useState("");
 const [submitted, setSubmitted] = useState<string | null>(null);
 const [askedAt, setAskedAt] = useState<string | null>(null);
 
+const [loading, setLoading] = useState(false);
+const [aiSpeaking, setAiSpeaking] = useState<string[]>([]);
+const [aiAnswers, setAiAnswers] = useState<Record<string, string>>({});
+const [error, setError] = useState<string | null>(null);
+
 
   const speaking = useMemo(() => (submitted ? pickAdvisors(submitted) : []), [submitted]);
 
@@ -151,11 +145,38 @@ const [askedAt, setAskedAt] = useState<string | null>(null);
           </div>
 
           <button
-            onClick={() => {
+          onClick={async () => {
   const q = question.trim();
-  setSubmitted(q || null);
-  setAskedAt(q ? nowStamp() : null);
+  if (!q) return;
+
+  setSubmitted(q);
+  setAskedAt(nowStamp());
+  setLoading(true);
+  setError(null);
+  setAiSpeaking([]);
+  setAiAnswers({});
+
+  try {
+    const res = await fetch("/.netlify/functions/ask-board", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question: q }),
+    });
+
+    if (!res.ok) {
+      throw new Error(`Request failed (${res.status})`);
+    }
+
+    const data = await res.json();
+    setAiSpeaking(data.speaking || []);
+    setAiAnswers(data.answers || {});
+  } catch (err: any) {
+    setError("The advisory board couldn’t respond. Please try again.");
+  } finally {
+    setLoading(false);
+  }
 }}
+
 
             style={{
               padding: "12px 14px",
