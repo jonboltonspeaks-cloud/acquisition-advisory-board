@@ -151,7 +151,12 @@ const [askedAt, setAskedAt] = useState<string | null>(null);
           </div>
 
           <button
-            onClick={() => setSubmitted(question.trim() || null)}
+            onClick={() => {
+  const q = question.trim();
+  setSubmitted(q || null);
+  setAskedAt(q ? nowStamp() : null);
+}}
+
             style={{
               padding: "12px 14px",
               borderRadius: 10,
