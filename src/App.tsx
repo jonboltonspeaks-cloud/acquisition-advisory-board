@@ -192,23 +192,7 @@ const [askedAt, setAskedAt] = useState<string | null>(null);
 </button>
 
           
-          <button
-            onClick={() => {
-              setQuestion("");
-              setSubmitted(null);
-            }}
-            style={{
-              padding: "12px 14px",
-              borderRadius: 10,
-              border: "1px solid #d9d9d9",
-              background: "#fff",
-              fontWeight: 700,
-              cursor: "pointer",
-              minWidth: 120,
-            }}
-          >
-            Clear
-          </button>
+          
         </div>
 
         <div style={{ marginTop: 14 }}>
