@@ -171,6 +171,27 @@ const [askedAt, setAskedAt] = useState<string | null>(null);
             Ask
           </button>
 
+<button
+  onClick={() => {
+    setQuestion("");
+    setSubmitted(null);
+    setAskedAt(null);
+  }}
+  style={{
+    padding: "12px 14px",
+    borderRadius: 10,
+    border: "1px solid #ddd",
+    background: "#fff",
+    color: "#111",
+    fontWeight: 700,
+    cursor: "pointer",
+    minWidth: 120,
+  }}
+>
+  Clear
+</button>
+
+          
           <button
             onClick={() => {
               setQuestion("");
