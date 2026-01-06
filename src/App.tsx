@@ -98,6 +98,23 @@ const SUGGESTED = [
   "Do I even want to sell — and what would “the right exit” look like for me?",
 ];
 
+function nowStamp() {
+  return new Date().toLocaleString([], {
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function initials(name: string) {
+  const cleaned = name.replace(/["“”]/g, "").replace(/\s+/g, " ").trim();
+  const parts = cleaned.split(" ").filter(Boolean);
+  const first = parts[0]?.[0] ?? "";
+  const last = parts[parts.length - 1]?.[0] ?? "";
+  return (first + last).toUpperCase();
+}
+
 export default function App() {
   const [question, setQuestion] = useState("");
   const [submitted, setSubmitted] = useState<string | null>(null);
