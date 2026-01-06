@@ -16,67 +16,116 @@ const ADVISORS: Advisor[] = [
     name: "Chris Halstead",
     title: "Financial and Valuation Strategist",
     vibe: "Numbers brain. Keeps you grounded.",
-    specialty: ["valuation", "EBITDA", "SDE", "QoE", "multiple", "margin", "financials", "books", "add-backs", "cash flow", "forecast"],
+    specialty: [
+      "valuation",
+      "EBITDA",
+      "SDE",
+      "QoE",
+      "multiple",
+      "margin",
+      "financials",
+      "books",
+      "add-backs",
+      "cash flow",
+      "forecast",
+    ],
   },
   {
     id: "maya",
     name: "Maya Reddington",
     title: "Negotiator and Deal Architect",
     vibe: "Clarity, leverage, and deal structure.",
-    specialty: ["LOI", "term", "terms", "negotiation", "leverage", "offer", "counter", "earnout", "escrow", "working capital", "structure", "price"],
+    specialty: [
+      "LOI",
+      "term",
+      "terms",
+      "negotiation",
+      "leverage",
+      "offer",
+      "counter",
+      "earnout",
+      "escrow",
+      "working capital",
+      "structure",
+      "price",
+    ],
   },
   {
     id: "dan",
-    name: "Daniel “Dan” Cortez",
+    name: 'Daniel “Dan” Cortez',
     title: "Operations and Systems Veteran",
     vibe: "Operator’s operator. Builds buyer-ready machines.",
-    specialty: ["SOP", "KPI", "process", "systems", "hiring", "training", "pricing", "capacity", "quality", "dispatch", "standardize"],
+    specialty: [
+      "SOP",
+      "KPI",
+      "process",
+      "systems",
+      "hiring",
+      "training",
+      "pricing",
+      "capacity",
+      "quality",
+      "dispatch",
+      "standardize",
+    ],
   },
   {
     id: "rick",
     name: "Rick Moreno",
     title: "Home Services Industry Insider",
     vibe: "Pattern recognition across the trades.",
-    specialty: ["market", "PE", "roll-up", "platform", "tuck-in", "industry", "consolidation", "competition", "trends", "buyer"],
+    specialty: [
+      "market",
+      "PE",
+      "roll-up",
+      "platform",
+      "tuck-in",
+      "industry",
+      "consolidation",
+      "competition",
+      "trends",
+      "buyer",
+    ],
   },
   {
     id: "jon",
     name: "Jon Mercer",
     title: "Owner Identity and Exit Coach",
     vibe: "The heart voice. Aligns decisions to your life.",
-    specialty: ["goals", "identity", "life", "what do I want", "burnout", "stay on", "walk away", "legacy", "purpose", "values"],
+    specialty: [
+      "goals",
+      "identity",
+      "life",
+      "what do I want",
+      "burnout",
+      "stay on",
+      "walk away",
+      "legacy",
+      "purpose",
+      "values",
+    ],
   },
 ];
 
+// Fallback selector (used only if the function doesn’t return speaking[] for some reason)
 function pickAdvisors(question: string): AdvisorId[] {
   const q = question.toLowerCase().trim();
   if (!q) return [];
 
-  // Simple “who speaks up” rules for V1 (we’ll replace with AI later)
   const hits = new Set<AdvisorId>();
-
   const containsAny = (words: string[]) => words.some((w) => q.includes(w.toLowerCase()));
 
   for (const a of ADVISORS) {
     if (containsAny(a.specialty)) hits.add(a.id);
   }
 
-  // If nothing matched, default to Maya + Jon (most broadly useful)
   if (hits.size === 0) {
     hits.add("maya");
     hits.add("jon");
   }
 
-  // Cap at 3 voices so it feels like “only who matters speaks”
   const order: AdvisorId[] = ["chris", "maya", "dan", "rick", "jon"];
   return order.filter((id) => hits.has(id)).slice(0, 3);
-}
-
-<div style={{ marginTop: 10, lineHeight: 1.5 }}>
-  {aiAnswers[id]}
-</div>
-
-
 }
 
 const SUGGESTED = [
@@ -96,29 +145,48 @@ function nowStamp() {
   });
 }
 
-function initials(name: string) {
-  const cleaned = name.replace(/["“”]/g, "").replace(/\s+/g, " ").trim();
-  const parts = cleaned.split(" ").filter(Boolean);
-  const first = parts[0]?.[0] ?? "";
-  const last = parts[parts.length - 1]?.[0] ?? "";
-  return (first + last).toUpperCase();
-}
-
 export default function App() {
-const [question, setQuestion] = useState("");
-const [submitted, setSubmitted] = useState<string | null>(null);
-const [askedAt, setAskedAt] = useState<string | null>(null);
+  const [question, setQuestion] = useState("");
+  const [submitted, setSubmitted] = useState<string | null>(null);
+  const [askedAt, setAskedAt] = useState<string | null>(null);
 
-const [loading, setLoading] = useState(false);
-const [aiSpeaking, setAiSpeaking] = useState<string[]>([]);
-const [aiAnswers, setAiAnswers] = useState<Record<string, string>>({});
-const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [aiSpeaking, setAiSpeaking] = useState<string[]>([]);
+  const [aiAnswers, setAiAnswers] = useState<Record<string, string>>({});
+  const [error, setError] = useState<string | null>(null);
 
+  // Decide who speaks:
+  // - Prefer the server-provided speaking list
+  // - Fallback to local pickAdvisors if needed
+  const speaking = useMemo<AdvisorId[]>(() => {
+    if (!submitted) return [];
 
-  const speaking = useMemo(() => (submitted ? pickAdvisors(submitted) : []), [submitted]);
+    const allowed = new Set<AdvisorId>(["chris", "maya", "dan", "rick", "jon"]);
+    const cleaned = (aiSpeaking || []).filter((id): id is AdvisorId => allowed.has(id as AdvisorId));
+
+    if (cleaned.length > 0) return cleaned.slice(0, 5);
+    return pickAdvisors(submitted);
+  }, [submitted, aiSpeaking]);
+
+  const clearAll = () => {
+    setQuestion("");
+    setSubmitted(null);
+    setAskedAt(null);
+    setLoading(false);
+    setAiSpeaking([]);
+    setAiAnswers({});
+    setError(null);
+  };
 
   return (
-    <div style={{ fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial", padding: 28, maxWidth: 1100, margin: "0 auto" }}>
+    <div
+      style={{
+        fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial",
+        padding: 28,
+        maxWidth: 1100,
+        margin: "0 auto",
+      }}
+    >
       <header style={{ marginBottom: 18 }}>
         <h1 style={{ margin: 0, fontSize: 38, letterSpacing: -0.5 }}>Acquisition Advisory Board</h1>
         <p style={{ marginTop: 10, marginBottom: 0, fontSize: 16, opacity: 0.85 }}>
@@ -145,39 +213,37 @@ const [error, setError] = useState<string | null>(null);
           </div>
 
           <button
-          onClick={async () => {
-  const q = question.trim();
-  if (!q) return;
+            onClick={async () => {
+              const q = question.trim();
+              if (!q) return;
 
-  setSubmitted(q);
-  setAskedAt(nowStamp());
-  setLoading(true);
-  setError(null);
-  setAiSpeaking([]);
-  setAiAnswers({});
+              setSubmitted(q);
+              setAskedAt(nowStamp());
+              setLoading(true);
+              setError(null);
+              setAiSpeaking([]);
+              setAiAnswers({});
 
-  try {
-    const res = await fetch("/.netlify/functions/ask-board", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question: q }),
-    });
+              try {
+                const res = await fetch("/.netlify/functions/ask-board", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ question: q }),
+                });
 
-    if (!res.ok) {
-      throw new Error(`Request failed (${res.status})`);
-    }
+                if (!res.ok) {
+                  throw new Error(`Request failed (${res.status})`);
+                }
 
-    const data = await res.json();
-    setAiSpeaking(data.speaking || []);
-    setAiAnswers(data.answers || {});
-  } catch (err: any) {
-    setError("The advisory board couldn’t respond. Please try again.");
-  } finally {
-    setLoading(false);
-  }
-}}
-
-
+                const data = await res.json();
+                setAiSpeaking(Array.isArray(data.speaking) ? data.speaking : []);
+                setAiAnswers(data.answers && typeof data.answers === "object" ? data.answers : {});
+              } catch {
+                setError("The advisory board couldn’t respond. Please try again.");
+              } finally {
+                setLoading(false);
+              }
+            }}
             style={{
               padding: "12px 14px",
               borderRadius: 10,
@@ -187,33 +253,28 @@ const [error, setError] = useState<string | null>(null);
               fontWeight: 700,
               cursor: "pointer",
               minWidth: 120,
+              opacity: loading ? 0.7 : 1,
             }}
+            disabled={loading}
           >
-            Ask
+            {loading ? "Asking…" : "Ask"}
           </button>
 
-<button
-  onClick={() => {
-    setQuestion("");
-    setSubmitted(null);
-    setAskedAt(null);
-  }}
-  style={{
-    padding: "12px 14px",
-    borderRadius: 10,
-    border: "1px solid #ddd",
-    background: "#fff",
-    color: "#111",
-    fontWeight: 700,
-    cursor: "pointer",
-    minWidth: 120,
-  }}
->
-  Clear
-</button>
-
-          
-          
+          <button
+            onClick={clearAll}
+            style={{
+              padding: "12px 14px",
+              borderRadius: 10,
+              border: "1px solid #ddd",
+              background: "#fff",
+              color: "#111",
+              fontWeight: 700,
+              cursor: "pointer",
+              minWidth: 120,
+            }}
+          >
+            Clear
+          </button>
         </div>
 
         <div style={{ marginTop: 14 }}>
@@ -276,23 +337,39 @@ const [error, setError] = useState<string | null>(null);
             <div style={{ marginBottom: 14 }}>
               <div style={{ fontSize: 12, fontWeight: 800, opacity: 0.7 }}>YOUR QUESTION</div>
               <div style={{ fontSize: 16, fontWeight: 750, marginTop: 6 }}>{submitted}</div>
+              {askedAt && <div style={{ fontSize: 12, opacity: 0.6, marginTop: 6 }}>Asked: {askedAt}</div>}
             </div>
+
+            {/* STEP 4 + 5: Loading + Error go RIGHT HERE (directly above responses) */}
+            {loading && (
+              <div style={{ padding: 12, fontStyle: "italic", opacity: 0.75 }}>
+                The advisory board is conferring…
+              </div>
+            )}
+
+            {error && (
+              <div style={{ padding: 12, color: "#b00020", fontWeight: 700 }}>
+                {error}
+              </div>
+            )}
 
             <div style={{ display: "grid", gap: 10 }}>
               {speaking.map((id) => {
                 const advisor = ADVISORS.find((a) => a.id === id)!;
+                const answer = aiAnswers[id];
+
                 return (
                   <div key={id} style={{ border: "1px solid #ededed", borderRadius: 12, padding: 14 }}>
                     <div style={{ fontWeight: 900 }}>{advisor.name}</div>
                     <div style={{ fontSize: 13, opacity: 0.8, marginTop: 4 }}>{advisor.title}</div>
-                    <div style={{ marginTop: 10, lineHeight: 1.5 }}>{demoResponse(id, submitted)}</div>
+
+                    {/* STEP 6: This is the correct render spot for the AI answer */}
+                    <div style={{ marginTop: 10, lineHeight: 1.5 }}>
+                      {answer ? answer : (loading ? "…" : "No response returned. Try asking again.")}
+                    </div>
                   </div>
                 );
               })}
-            </div>
-
-            <div style={{ marginTop: 14, opacity: 0.7, fontSize: 12, lineHeight: 1.4 }}>
-              *This is a demo version of the experience. Next step is wiring real AI responses and letting the Board decide who speaks based on intent.
             </div>
           </div>
         )}
