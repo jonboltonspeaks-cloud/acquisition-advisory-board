@@ -1,7 +1,5 @@
-export const config = {
-  // Keeps responses fast and avoids timeouts on free-ish plans.
-  // (Netlify will still enforce its own limits.)
-};
+// netlify/functions/ask-board.ts
+import type { Handler } from "@netlify/functions";
 
 type AdvisorId = "chris" | "maya" | "dan" | "rick" | "jon";
 
@@ -10,46 +8,125 @@ type AdvisorAnswer = {
   answers: Record<AdvisorId, string>;
 };
 
-function json(body: any, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: {
-      "Content-Type": "application/json; charset=utf-8",
-      "Access-Control-Allow-Origin": "*",
-    },
-  });
+const ALLOW_ORIGIN = "*"; // Optionally tighten later to your Netlify domain
+
+function corsHeaders() {
+  return {
+    "Access-Control-Allow-Origin": ALLOW_ORIGIN,
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Content-Type": "application/json; charset=utf-8",
+    "Cache-Control": "no-store",
+  };
+}
+
+function json(statusCode: number, body: any) {
+  return {
+    statusCode,
+    headers: corsHeaders(),
+    body: JSON.stringify(body),
+  };
 }
 
 function pickSpeakers(question: string): AdvisorId[] {
   const q = question.toLowerCase();
-
   const hits = new Set<AdvisorId>();
 
   const hasAny = (words: string[]) => words.some((w) => q.includes(w));
 
-  if (hasAny(["valuation", "multiple", "ebitda", "sde", "qoe", "margin", "books", "add-back", "add back", "cash flow", "forecast", "financial"])) {
+  if (
+    hasAny([
+      "valuation",
+      "multiple",
+      "ebitda",
+      "sde",
+      "qoe",
+      "margin",
+      "books",
+      "add-back",
+      "add back",
+      "cash flow",
+      "forecast",
+      "financial",
+    ])
+  )
     hits.add("chris");
-  }
-  if (hasAny(["loi", "term", "terms", "negotiat", "leverage", "counter", "offer", "earnout", "escrow", "working capital", "structure", "price"])) {
-    hits.add("maya");
-  }
-  if (hasAny(["sop", "kpi", "process", "systems", "hiring", "training", "pricing", "capacity", "quality", "dispatch", "standard"])) {
-    hits.add("dan");
-  }
-  if (hasAny(["market", "pe", "private equity", "roll-up", "roll up", "platform", "tuck-in", "tuck in", "industry", "consolidation", "competition", "trends", "buyer"])) {
-    hits.add("rick");
-  }
-  if (hasAny(["goals", "identity", "burnout", "stay on", "walk away", "legacy", "purpose", "values", "life", "do i want to sell"])) {
-    hits.add("jon");
-  }
 
-  // If nothing matched, default to broad helpers
+  if (
+    hasAny([
+      "loi",
+      "term",
+      "terms",
+      "negotiat",
+      "leverage",
+      "counter",
+      "offer",
+      "earnout",
+      "escrow",
+      "working capital",
+      "structure",
+      "price",
+    ])
+  )
+    hits.add("maya");
+
+  if (
+    hasAny([
+      "sop",
+      "kpi",
+      "process",
+      "systems",
+      "hiring",
+      "training",
+      "pricing",
+      "capacity",
+      "quality",
+      "dispatch",
+      "standard",
+    ])
+  )
+    hits.add("dan");
+
+  if (
+    hasAny([
+      "market",
+      "pe",
+      "private equity",
+      "roll-up",
+      "roll up",
+      "platform",
+      "tuck-in",
+      "tuck in",
+      "industry",
+      "consolidation",
+      "competition",
+      "trends",
+      "buyer",
+    ])
+  )
+    hits.add("rick");
+
+  if (
+    hasAny([
+      "goals",
+      "identity",
+      "burnout",
+      "stay on",
+      "walk away",
+      "legacy",
+      "purpose",
+      "values",
+      "life",
+      "do i want to sell",
+    ])
+  )
+    hits.add("jon");
+
   if (hits.size === 0) {
     hits.add("maya");
     hits.add("jon");
   }
 
-  // Cap at 3 voices for “only who matters speaks”
   const order: AdvisorId[] = ["chris", "maya", "dan", "rick", "jon"];
   return order.filter((id) => hits.has(id)).slice(0, 3);
 }
@@ -81,95 +158,121 @@ function advisorPrompt(advisor: AdvisorId, question: string) {
   ].join("\n");
 }
 
-export default async (request: Request) => {
-  if (request.method === "OPTIONS") {
-    return new Response("", {
-      status: 204,
+async function callOpenAI(opts: {
+  apiKey: string;
+  model: string;
+  prompt: string;
+  timeoutMs?: number;
+}) {
+  const { apiKey, model, prompt, timeoutMs = 20000 } = opts;
+
+  // Safety: never allow absurdly large prompts
+  const input = prompt.length > 8000 ? prompt.slice(0, 8000) : prompt;
+
+  const controller = new AbortController();
+  const t = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const resp = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      signal: controller.signal,
       headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
       },
+      body: JSON.stringify({
+        model,
+        input,
+        temperature: 0.6,
+        // Optional: keep responses bounded
+        max_output_tokens: 350,
+      }),
     });
+
+    if (!resp.ok) {
+      // IMPORTANT: don’t pass through raw provider errors to the browser in prod
+      const raw = await resp.text();
+      return { ok: false as const, status: resp.status, raw: raw.slice(0, 400) };
+    }
+
+    const data: any = await resp.json();
+    const out = data?.output_text ?? data?.output?.[0]?.content?.[0]?.text ?? "";
+    return { ok: true as const, text: String(out || "").trim() };
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+export const handler: Handler = async (event) => {
+  // CORS preflight
+  if (event.httpMethod === "OPTIONS") {
+    return {
+      statusCode: 204,
+      headers: corsHeaders(),
+      body: "",
+    };
   }
 
-  if (request.method !== "POST") {
-    return json({ error: "Use POST" }, 405);
+  // POST-only
+  if (event.httpMethod !== "POST") {
+    return json(405, { error: "Use POST" });
   }
 
   const apiKey = process.env.OPENAI_API_KEY;
   const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
 
   if (!apiKey) {
-    return json(
-      {
-        error:
-          "Missing OPENAI_API_KEY. Add it in Netlify → Project configuration → Environment variables (as a secret).",
-      },
-      500
-    );
+    return json(500, {
+      error:
+        "Missing OPENAI_API_KEY. Add it in Netlify → Project configuration → Environment variables (as a secret).",
+    });
   }
 
-  let body: any = null;
+  let body: any;
   try {
-    body = await request.json();
+    body = event.body ? JSON.parse(event.body) : null;
   } catch {
-    return json({ error: "Invalid JSON body" }, 400);
+    return json(400, { error: "Invalid JSON body" });
   }
 
   const question = String(body?.question || "").trim();
-  if (!question) return json({ error: "Missing question" }, 400);
+
+  if (!question) return json(400, { error: "Missing question" });
+  if (question.length > 2000) return json(400, { error: "Question too long" });
 
   const speaking = pickSpeakers(question);
 
+  // Always return full advisor map (stable shape)
+  const answers: Record<AdvisorId, string> = {
+    chris: "",
+    maya: "",
+    dan: "",
+    rick: "",
+    jon: "",
+  };
+
   try {
-    const answers: Record<AdvisorId, string> = {
-      chris: "",
-      maya: "",
-      dan: "",
-      rick: "",
-      jon: "",
-    };
-
-    // Call OpenAI once per speaking advisor (simple + robust for V1)
-    for (const advisor of speaking) {
+    // Call OpenAI in parallel for the selected speakers
+    const jobs = speaking.map(async (advisor) => {
       const prompt = advisorPrompt(advisor, question);
+      const result = await callOpenAI({ apiKey, model, prompt });
 
-      const resp = await fetch("https://api.openai.com/v1/responses", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model,
-          input: prompt,
-          temperature: 0.6,
-        }),
-      });
-
-      if (!resp.ok) {
-        const text = await resp.text();
-        return json(
-          { error: `OpenAI error (${resp.status})`, details: text.slice(0, 500) },
-          500
-        );
+      if (!result.ok) {
+        // Server logs are OK; browser output should stay generic
+        console.error("OpenAI error", { status: result.status, raw: result.raw });
+        answers[advisor] = "I hit a snag generating this response. Please try again.";
+        return;
       }
 
-      const data: any = await resp.json();
+      answers[advisor] = result.text || "No response.";
+    });
 
-      // Responses API: best-effort extraction
-      const out =
-        data?.output_text ??
-        data?.output?.[0]?.content?.[0]?.text ??
-        "";
-
-      answers[advisor] = String(out || "").trim() || "No response.";
-    }
+    await Promise.all(jobs);
 
     const payload: AdvisorAnswer = { speaking, answers };
-    return json(payload, 200);
+    return json(200, payload);
   } catch (err: any) {
-    return json({ error: "Server error", details: String(err?.message || err) }, 500);
+    console.error("Server error", err);
+    return json(500, { error: "Server error. Please try again." });
   }
 };
