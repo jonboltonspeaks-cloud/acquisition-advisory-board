@@ -113,7 +113,8 @@ function pickAdvisors(question: string): AdvisorId[] {
   if (!q) return [];
 
   const hits = new Set<AdvisorId>();
-  const containsAny = (words: string[]) => words.some((w) => q.includes(w.toLowerCase()));
+  const containsAny = (words: string[]) =>
+    words.some((w) => q.includes(w.toLowerCase()));
 
   for (const a of ADVISORS) {
     if (containsAny(a.specialty)) hits.add(a.id);
@@ -153,6 +154,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [aiSpeaking, setAiSpeaking] = useState<string[]>([]);
   const [aiAnswers, setAiAnswers] = useState<Record<string, string>>({});
+  const [answeredCount, setAnsweredCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   // Decide who speaks:
@@ -162,11 +164,21 @@ export default function App() {
     if (!submitted) return [];
 
     const allowed = new Set<AdvisorId>(["chris", "maya", "dan", "rick", "jon"]);
-    const cleaned = (aiSpeaking || []).filter((id): id is AdvisorId => allowed.has(id as AdvisorId));
+    const cleaned = (aiSpeaking || []).filter((id): id is AdvisorId =>
+      allowed.has(id as AdvisorId)
+    );
 
     if (cleaned.length > 0) return cleaned.slice(0, 5);
     return pickAdvisors(submitted);
   }, [submitted, aiSpeaking]);
+
+  // Counts how many answers are actually filled in (and whether any are “snag”)
+  const responseStats = useMemo(() => {
+    const vals = Object.values(aiAnswers || {}).map((v) => String(v || "").trim());
+    const filled = vals.filter((v) => v.length > 0).length;
+    const snagged = vals.some((v) => v.toLowerCase().includes("hit a snag"));
+    return { filled, snagged };
+  }, [aiAnswers]);
 
   const clearAll = () => {
     setQuestion("");
@@ -175,6 +187,7 @@ export default function App() {
     setLoading(false);
     setAiSpeaking([]);
     setAiAnswers({});
+    setAnsweredCount(0);
     setError(null);
   };
 
@@ -188,16 +201,27 @@ export default function App() {
       }}
     >
       <header style={{ marginBottom: 18 }}>
-        <h1 style={{ margin: 0, fontSize: 38, letterSpacing: -0.5 }}>Acquisition Advisory Board</h1>
+        <h1 style={{ margin: 0, fontSize: 38, letterSpacing: -0.5 }}>
+          Acquisition Advisory Board
+        </h1>
         <p style={{ marginTop: 10, marginBottom: 0, fontSize: 16, opacity: 0.85 }}>
           Five experts behind you. One purpose in front of you. Your most valuable exit.
         </p>
       </header>
 
-      <section style={{ border: "1px solid #e6e6e6", borderRadius: 14, padding: 18, marginBottom: 18 }}>
+      <section
+        style={{
+          border: "1px solid #e6e6e6",
+          borderRadius: 14,
+          padding: 18,
+          marginBottom: 18,
+        }}
+      >
         <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
           <div style={{ flex: "1 1 520px" }}>
-            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, opacity: 0.85 }}>Ask the Board</div>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, opacity: 0.85 }}>
+              Ask the Board
+            </div>
             <input
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
@@ -223,6 +247,7 @@ export default function App() {
               setError(null);
               setAiSpeaking([]);
               setAiAnswers({});
+              setAnsweredCount(0);
 
               try {
                 const res = await fetch("/.netlify/functions/ask-board", {
@@ -236,8 +261,18 @@ export default function App() {
                 }
 
                 const data = await res.json();
-                setAiSpeaking(Array.isArray(data.speaking) ? data.speaking : []);
-                setAiAnswers(data.answers && typeof data.answers === "object" ? data.answers : {});
+
+                const nextSpeaking = Array.isArray(data?.speaking) ? data.speaking : [];
+                const nextAnswers =
+                  data?.answers && typeof data.answers === "object" ? data.answers : {};
+
+                setAiSpeaking(nextSpeaking);
+                setAiAnswers(nextAnswers);
+
+                const count = Object.values(nextAnswers).filter(
+                  (v) => typeof v === "string" && v.trim().length > 0
+                ).length;
+                setAnsweredCount(count);
               } catch {
                 setError("The advisory board couldn’t respond. Please try again.");
               } finally {
@@ -278,7 +313,9 @@ export default function App() {
         </div>
 
         <div style={{ marginTop: 14 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, opacity: 0.85 }}>Suggested questions</div>
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, opacity: 0.85 }}>
+            Suggested questions
+          </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             {SUGGESTED.map((s) => (
               <button
@@ -300,7 +337,14 @@ export default function App() {
         </div>
       </section>
 
-      <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12, marginBottom: 18 }}>
+      <section
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+          gap: 12,
+          marginBottom: 18,
+        }}
+      >
         {ADVISORS.map((a) => (
           <div key={a.id} style={{ border: "1px solid #e6e6e6", borderRadius: 14, padding: 14 }}>
             <div style={{ fontWeight: 800 }}>{a.name}</div>
@@ -326,7 +370,9 @@ export default function App() {
       </section>
 
       <section style={{ border: "1px solid #e6e6e6", borderRadius: 14, padding: 18 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, opacity: 0.85, marginBottom: 10 }}>Boardroom</div>
+        <div style={{ fontSize: 13, fontWeight: 700, opacity: 0.85, marginBottom: 10 }}>
+          Boardroom
+        </div>
 
         {!submitted ? (
           <div style={{ opacity: 0.75, lineHeight: 1.5 }}>
@@ -340,18 +386,36 @@ export default function App() {
               {askedAt && <div style={{ fontSize: 12, opacity: 0.6, marginTop: 6 }}>Asked: {askedAt}</div>}
             </div>
 
-            {/* STEP 4 + 5: Loading + Error go RIGHT HERE (directly above responses) */}
-            {loading && (
-              <div style={{ padding: 12, fontStyle: "italic", opacity: 0.75 }}>
-                The advisory board is conferring…
-              </div>
-            )}
-
-            {error && (
-              <div style={{ padding: 12, color: "#b00020", fontWeight: 700 }}>
-                {error}
-              </div>
-            )}
+            {/* Subtle gray status bar (above responses) */}
+            <div
+              style={{
+                padding: 12,
+                borderRadius: 10,
+                border: "1px solid #eee",
+                background: "#fafafa",
+                marginBottom: 10,
+                fontSize: 13,
+                lineHeight: 1.4,
+              }}
+            >
+              {loading ? (
+                <span style={{ opacity: 0.75 }}>The advisory board is conferring…</span>
+              ) : error ? (
+                <span style={{ color: "#b00020", fontWeight: 700 }}>{error}</span>
+              ) : speaking.length > 0 ? (
+                <span style={{ opacity: 0.85 }}>
+                  Advisors responding: <b>{answeredCount || responseStats.filled}</b> of{" "}
+                  <b>{speaking.length}</b>
+                  {responseStats.snagged ? (
+                    <span style={{ opacity: 0.8 }}> — one advisor hit a snag.</span>
+                  ) : null}
+                </span>
+              ) : (
+                <span style={{ opacity: 0.75 }}>
+                  Ask a question above. Advisors will speak up when relevant.
+                </span>
+              )}
+            </div>
 
             <div style={{ display: "grid", gap: 10 }}>
               {speaking.map((id) => {
@@ -363,9 +427,8 @@ export default function App() {
                     <div style={{ fontWeight: 900 }}>{advisor.name}</div>
                     <div style={{ fontSize: 13, opacity: 0.8, marginTop: 4 }}>{advisor.title}</div>
 
-                    {/* STEP 6: This is the correct render spot for the AI answer */}
                     <div style={{ marginTop: 10, lineHeight: 1.5 }}>
-                      {answer ? answer : (loading ? "…" : "No response returned. Try asking again.")}
+                      {answer ? answer : loading ? "Thinking…" : "No answer from this advisor on this question."}
                     </div>
                   </div>
                 );
