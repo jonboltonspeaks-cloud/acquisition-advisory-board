@@ -49,8 +49,9 @@ function pickSpeakers(question: string): AdvisorId[] {
       "forecast",
       "financial",
     ])
-  )
+  ) {
     hits.add("chris");
+  }
 
   if (
     hasAny([
@@ -66,9 +67,19 @@ function pickSpeakers(question: string): AdvisorId[] {
       "working capital",
       "structure",
       "price",
+      "meeting",
+      "first meeting",
+      "intro call",
+      "discovery",
+      "call",
+      "buyer meeting",
+      "bring",
+      "attend",
+      "who should",
     ])
-  )
+  ) {
     hits.add("maya");
+  }
 
   if (
     hasAny([
@@ -83,9 +94,17 @@ function pickSpeakers(question: string): AdvisorId[] {
       "quality",
       "dispatch",
       "standard",
+      "team",
+      "head inspector",
+      "lead inspector",
+      "manager",
+      "operations",
+      "roles",
+      "org chart",
     ])
-  )
+  ) {
     hits.add("dan");
+  }
 
   if (
     hasAny([
@@ -103,8 +122,9 @@ function pickSpeakers(question: string): AdvisorId[] {
       "trends",
       "buyer",
     ])
-  )
+  ) {
     hits.add("rick");
+  }
 
   if (
     hasAny([
@@ -118,15 +138,31 @@ function pickSpeakers(question: string): AdvisorId[] {
       "values",
       "life",
       "do i want to sell",
+      "what do i want",
     ])
-  )
+  ) {
     hits.add("jon");
+  }
 
+  // If nothing matched, default to broad helpers
   if (hits.size === 0) {
     hits.add("maya");
     hits.add("jon");
   }
 
+  // ✅ If only one matched, add a “generalist” so it feels like a boardroom
+  // Prefer Maya, then Jon.
+  if (hits.size === 1) {
+    const generalists: AdvisorId[] = ["maya", "jon"];
+    for (const g of generalists) {
+      if (!hits.has(g)) {
+        hits.add(g);
+        break;
+      }
+    }
+  }
+
+  // Cap at 3 voices for “only who matters speaks”
   const order: AdvisorId[] = ["chris", "maya", "dan", "rick", "jon"];
   return order.filter((id) => hits.has(id)).slice(0, 3);
 }
@@ -166,7 +202,6 @@ async function callOpenAI(opts: {
 }) {
   const { apiKey, model, prompt, timeoutMs = 20000 } = opts;
 
-  // Safety: never allow absurdly large prompts
   const input = prompt.length > 8000 ? prompt.slice(0, 8000) : prompt;
 
   const controller = new AbortController();
@@ -184,13 +219,11 @@ async function callOpenAI(opts: {
         model,
         input,
         temperature: 0.6,
-        // Optional: keep responses bounded
-        max_output_tokens: 350,
+        max_output_tokens: 300,
       }),
     });
 
     if (!resp.ok) {
-      // IMPORTANT: don’t pass through raw provider errors to the browser in prod
       const raw = await resp.text();
       return { ok: false as const, status: resp.status, raw: raw.slice(0, 400) };
     }
@@ -204,7 +237,6 @@ async function callOpenAI(opts: {
 }
 
 export const handler: Handler = async (event) => {
-  // CORS preflight
   if (event.httpMethod === "OPTIONS") {
     return {
       statusCode: 204,
@@ -213,7 +245,6 @@ export const handler: Handler = async (event) => {
     };
   }
 
-  // POST-only
   if (event.httpMethod !== "POST") {
     return json(405, { error: "Use POST" });
   }
@@ -242,7 +273,6 @@ export const handler: Handler = async (event) => {
 
   const speaking = pickSpeakers(question);
 
-  // Always return full advisor map (stable shape)
   const answers: Record<AdvisorId, string> = {
     chris: "",
     maya: "",
@@ -252,14 +282,12 @@ export const handler: Handler = async (event) => {
   };
 
   try {
-    // Call OpenAI in parallel for the selected speakers
     const jobs = speaking.map(async (advisor) => {
       const prompt = advisorPrompt(advisor, question);
       const result = await callOpenAI({ apiKey, model, prompt });
 
       if (!result.ok) {
-        // Server logs are OK; browser output should stay generic
-        console.error("OpenAI error", { status: result.status, raw: result.raw });
+        console.error("OpenAI error", { advisor, status: result.status, raw: result.raw });
         answers[advisor] = "I hit a snag generating this response. Please try again.";
         return;
       }
